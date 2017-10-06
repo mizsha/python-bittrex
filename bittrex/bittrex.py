@@ -18,11 +18,15 @@ SELL_ORDERBOOK = 'sell'
 BOTH_ORDERBOOK = 'both'
 
 BASE_URL = 'https://bittrex.com/api/v1.1/%s/'
+BASEV2_URL = 'https://bittrex.com/Api/v2.0/%s/'
+
 
 MARKET_SET = {'getopenorders', 'cancel', 'sellmarket', 'selllimit', 'buymarket', 'buylimit'}
 
-ACCOUNT_SET = {'getbalances', 'getbalance', 'getdepositaddress', 'withdraw', 'getorderhistory'}
+ACCOUNT_SET = {'getbalances', 'getbalance', 'getdepositaddress', 'withdraw', 'getorderhistory', 'getdeposithistory'}
 
+PUBLIC = {''}
+AUTHORIZED = {''}
 
 class Bittrex(object):
     """
@@ -67,6 +71,41 @@ class Bittrex(object):
             headers={"apisign": hmac.new(self.api_secret.encode(), request_url.encode(), hashlib.sha512).hexdigest()}
         ).json()
 
+    def api2_query(self, method, options=None):
+        """
+        Queries Bittrex with given method and options
+
+        :param method: Query method for getting info
+        :type method: str
+
+        :param options: Extra options for query
+        :type options: dict
+
+        :return: JSON response from Bittrex
+        :rtype : dict
+        """
+        if not options:
+            options = {}
+        nonce = str(int(time.time() * 1000))
+        method_set = 'pub'
+
+        if method in PUBLIC:
+            method_set = 'market'
+        elif method in AUTHORIZED:
+            method_set = 'auth'
+
+        request_url = (BASEV2_URL % method_set) + method + '?'
+
+        if method_set != 'pub':
+            request_url += 'apikey=' + self.api_key + "&nonce=" + nonce + '&'
+
+        request_url += urlencode(options)
+
+        return requests.get(
+            request_url,
+            headers={"apisign": hmac.new(self.api_secret.encode(), request_url.encode(), hashlib.sha512).hexdigest()}
+        ).json()
+
     def get_markets(self):
         """
         Used to get the open and available trading markets
@@ -99,6 +138,18 @@ class Bittrex(object):
         """
         return self.api_query('getticker', {'market': market})
 
+    def get_market_summary(self, market):
+        """
+        Used to get the current tick values for a market.
+
+        :param market: String literal for the market (ex: BTC-LTC)
+        :type market: str
+
+        :return: Current values for given market in JSON
+        :rtype : dict
+        """
+        return self.api_query('getmarketsummary', {'market': market})
+
     def get_market_summaries(self):
         """
         Used to get the last 24 hour summary of all active exchanges
@@ -108,7 +159,7 @@ class Bittrex(object):
         """
         return self.api_query('getmarketsummaries')
 
-    def get_orderbook(self, market, depth_type, depth=20):
+    def get_orderbook(self, market, depth_type = "both" ):
         """
         Used to get retrieve the orderbook for a given market
 
@@ -125,7 +176,7 @@ class Bittrex(object):
         :return: Orderbook of market in JSON
         :rtype : dict
         """
-        return self.api_query('getorderbook', {'market': market, 'type': depth_type, 'depth': depth})
+        return self.api_query('getorderbook', {'market': market, 'type': depth_type})
 
     def get_market_history(self, market, count):
         """
@@ -341,3 +392,18 @@ class Bittrex(object):
 
         """
         return self.api_query('getorderhistory', {'market':market, 'count': count})
+
+    def get_deposit_history(self, currency):
+        """
+        Used to retrieve your deposit history
+
+        /account/getdeposithistory
+
+        :param currency: String literal for the currency (ie. BTC)
+        :type currency: str
+
+        :return: deposit history in JSON
+        :rtype : dict
+
+        """
+        return self.api_query('getdeposithistory', {'currency':currency})
